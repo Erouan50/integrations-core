@@ -37,6 +37,9 @@ METRICS = [
     'kafka.consumer_lag',
 ]
 
+TOPICS = ['marvel', 'dc']
+PARTITIONS = [0, 1]
+
 SHUTDOWN = False
 
 class Producer(threading.Thread):
@@ -63,31 +66,45 @@ class Consumer(threading.Thread):
     daemon = True
 
     def run(self):
-        # zk_path_consumer = zk_prefix + '/consumers/'
-        # zk_path_topic_tmpl = zk_path_consumer + '{group}/offsets/'
-        # zk_path_partition_tmpl = zk_path_topic_tmpl + '{topic}/'
+        zk_path_topic_tmpl = '/consumers/my_consumer/offsets/'
+        zk_path_partition_tmpl = zk_path_topic_tmpl + '{topic}/'
 
-        # zk_conn = KazooClient(zk_hosts_ports, timeout=self.zk_timeout)
-        # zk_conn.start()
+        zk_conn = KazooClient(instance[0]['zk_connect_str'], timeout=10)
+        zk_conn.start()
+
+        for topic in TOPICS:
+            for partition in PARTITIONS:
+                node_path = os.path.join(zk_path_topic_tmpl.format(topic), str(partition))
+                node = zk_conn.exists(node_path)
+                if not node:
+                    zk_conn.ensure_path(node_path)
 
         consumer = KafkaConsumer(bootstrap_servers=instance[0]['kafka_connect_str'],
                                  group_id="my_consumer",
                                  auto_offset_reset='earliest',
                                  enable_auto_commit=False)
-        consumer.subscribe(['marvel', 'dc'])
-
-
-        print "CONSUMER STARTED: "
+        consumer.subscribe()
 
         while not SHUTDOWN:
             response = consumer.poll(timeout_ms=500, max_records=10)
-            print "CONSUMER RESPONSE: %s" % response
+            zk_trans = zk_conn.transaction()
+            for tp, records in response:
+                topic = tp.topic
+                partition = tp.partition
 
-            offsets = consumer._subscription.all_consumed_offsets()
-            if not offsets:
-                print "NOTHING!"
-            for partition, metadata in offsets:
-                print "TOPIC: {} PART: {} META: {}".format(partition, partition, metadata)
+                offset = None
+                for record in records:
+                    if offset is None or record.offset > offset:
+                        offset = record.offset
+
+                zk_trans.set_data(
+                    os.path.join(zk_path_topic_tmpl.format(topic), str(partition)),
+                    offset
+                )
+
+            zk_trans.commit()
+
+        zk_conn.stop()
 
 
 @attr(requires='kafka_consumer')
