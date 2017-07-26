@@ -112,7 +112,9 @@ class KafkaCheck(AgentCheck):
         topic_partitions_without_a_leader = []
 
         instance_key = self._get_instance_key(instance)
-        for topic, partitions in response.topics:
+        for tp in response.topics:
+            topic = tp[0]
+            partitions = tp[1]
             for partition, error_code, offsets in partitions:
                 if error_code == 0:
                     highwater_offsets[(topic, partition)] = offsets[0]
@@ -132,7 +134,7 @@ class KafkaCheck(AgentCheck):
                                   topic, partition)
                     topic_partitions_without_a_leader.append((topic, partition))
 
-            return highwater_offsets, topic_partitions_without_a_leader
+        return highwater_offsets, topic_partitions_without_a_leader
 
     def _get_broker_offsets(self, instance):
         """
@@ -308,13 +310,14 @@ class KafkaCheck(AgentCheck):
         for (consumer_group, topic, partition), consumer_offset in consumer_offsets.iteritems():
             consumer_group_tags = ['topic:%s' % topic, 'partition:%s' % partition,
                 'consumer_group:%s' % consumer_group]
-            self.gauge('kafka.consumer_offset', consumer_offset, tags=consumer_group_tags)
             if (topic, partition) not in highwater_offsets:
                 if (topic, partition) not in topic_partitions_without_a_leader:
                     self.log.warn("Consumer group: %s has offsets for topic: %s "
                         "partition: %s, but that topic partition doesn't actually "
                         "exist in the cluster.", consumer_group, topic, partition)
                 continue
+
+            self.gauge('kafka.consumer_offset', consumer_offset, tags=consumer_group_tags)
             consumer_lag = highwater_offsets[(topic, partition)] - consumer_offset
             if consumer_lag < 0:
                 message = "Consumer lag for consumer group: {group}, topic: {topic}, " \
