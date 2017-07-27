@@ -166,17 +166,18 @@ class KafkaCheck(AgentCheck):
             attempts = 0
             processed = []
             pending = set([broker.nodeId for broker in cli.cluster.brokers()])
-            while len(pending) != 0 and self.broker_retries < attempts:
+            while len(pending) != 0 and self.broker_retries > attempts:
                 for node in processed:
                     pending.remove(node)
 
                 processed = []
                 for nodeId in pending:
                     if not cli.ready(nodeId):
-                        self.log.info('kafka broker (%s) unavailable this iteration - skipping', nodeId)
+                        self.log.debug('kafka broker (%s) unavailable this iteration - skipping', nodeId)
                         continue
 
                     # Group partitions by topic in order to construct the OffsetRequest
+                    self.log.debug('kafka broker (%s) getting processed...', nodeId)
                     partitions_grouped_by_topic = defaultdict(list)
                     # partitions_for_broker returns all partitions for which this
                     # broker is leader. So any partitions that don't currently have
@@ -303,7 +304,7 @@ class KafkaCheck(AgentCheck):
         consumer_groups = None
         if instance.get('monitor_unlisted_consumer_groups', False):
             consumer_groups = None
-        elif consumer_groups in instance:
+        elif 'consumer_groups' in instance:
             consumer_groups = self.read_config(instance, 'consumer_groups',
                                                cast=self._validate_consumer_groups)
 
