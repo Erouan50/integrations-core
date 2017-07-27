@@ -5,7 +5,6 @@
 # stdlib
 import random
 from collections import defaultdict
-import time
 
 # 3p
 from kafka.client import KafkaClient
@@ -89,6 +88,8 @@ class KafkaCheck(AgentCheck):
             raise Exception('No known available brokers... make this a specific exception')
         nodeid = random.sample(brokers, 1)[0].nodeId
 
+        return nodeid
+
     def _make_req_async(self, client, request, nodeid=None, cb=None):
         if not nodeid:
             nodeid = self._get_random_node_id(client)
@@ -112,7 +113,6 @@ class KafkaCheck(AgentCheck):
         highwater_offsets = {}
         topic_partitions_without_a_leader = []
 
-        instance_key = self._get_instance_key(instance)
         for tp in response.topics:
             topic = tp[0]
             partitions = tp[1]
@@ -383,4 +383,3 @@ You can omit partitions (example: myconsumer2), topics (example: myconsumer3), a
 If you omit consumer_groups, you must set the flag 'monitor_unlisted_consumer_groups': True.
 If a value is omitted, the parent value must still be it's expected type (typically a dict).
 """)
-

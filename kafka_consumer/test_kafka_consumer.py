@@ -117,7 +117,7 @@ class KConsumer(threading.Thread):
         consumer.subscribe(TOPICS)
 
         while not SHUTDOWN.is_set():
-            response = consumer.poll(timeout_ms=500, max_records=10)
+            consumer.poll(timeout_ms=500, max_records=10)
 
 
 @attr(requires='kafka_consumer')
@@ -170,7 +170,7 @@ class TestKafka(AgentCheckTest):
                             self.assertMetric(mname, tags=tags + ["consumer_group:{}".format(name)], at_least=1)
 
         # let's reassert for the __consumer_offsets - multiple partitions
-	self.assertMetric('kafka.broker_offset', at_least=1)
+        self.assertMetric('kafka.broker_offset', at_least=1)
         self.coverage_report()
 
 
@@ -190,19 +190,19 @@ class TestKafka(AgentCheckTest):
 
         for instance in nogroup_instances:
             for topic in TOPICS:
-	        if topic is not '__consumer_offsets':
+                if topic is not '__consumer_offsets':
                     for partition in PARTITIONS:
-	                tags = ["topic:{}".format(topic),
+                        tags = ["topic:{}".format(topic),
                                 "partition:{}".format(partition)]
                         for mname in BROKER_METRICS:
                             self.assertMetric(mname, tags=tags, at_least=1)
-                        for mname in CONSUMER_METRICS:
-                            self.assertMetric(mname, tags=tags + ["consumer_group:my_consumer"], at_least=1)
+                            for mname in CONSUMER_METRICS:
+                                self.assertMetric(mname, tags=tags + ["consumer_group:my_consumer"], at_least=1)
                 else:
                     for mname in BROKER_METRICS:
                         self.assertMetric(mname, at_least=1)
-                    for mname in CONSUMER_METRICS:
-                        tags = ['topic:__consumer_offsets', "consumer_group:my_consumer", "partition:0"]
-                        self.assertMetric(mname, tags=tags, at_least=1)
+                        for mname in CONSUMER_METRICS:
+                            tags = ['topic:__consumer_offsets', "consumer_group:my_consumer", "partition:0"]
+                            self.assertMetric(mname, tags=tags, at_least=1)
 
         self.coverage_report()
