@@ -43,6 +43,7 @@ class KafkaCheck(AgentCheck):
             init_config.get('kafka_timeout', DEFAULT_KAFKA_TIMEOUT))
 
         self.kafka_clients = {}
+        self.broker_retries = 3
 
     def stop(self):
         """
@@ -162,35 +163,46 @@ class KafkaCheck(AgentCheck):
         try:
             # store partitions that exist but unable to fetch offsets for later
             # error checking
-            for broker in cli.cluster.brokers():
-                if not cli.ready(broker.nodeId):
-                    self.log.info('kafka broker (%s) unavailable this iteration - skipping', broker.nodeId)
-                    continue
+            attempts = 0
+            processed = []
+            pending = set([broker.nodeId for broker in cli.cluster.brokers()])
+            while len(pending) != 0 and self.broker_retries < attempts:
+                for node in processed:
+                    pending.remove(node)
 
-                # Group partitions by topic in order to construct the OffsetRequest
-                partitions_grouped_by_topic = defaultdict(list)
-                # partitions_for_broker returns all partitions for which this
-                # broker is leader. So any partitions that don't currently have
-                # leaders will be missed. Ignore as they'll be caught on next check run.
-                broker_partitions = cli.cluster.partitions_for_broker(broker.nodeId)
-                if broker_partitions:
-                    for topic, partition in broker_partitions:
-                        partitions_grouped_by_topic[topic].append(partition)
+                processed = []
+                for nodeId in pending:
+                    if not cli.ready(nodeId):
+                        self.log.info('kafka broker (%s) unavailable this iteration - skipping', nodeId)
+                        continue
 
-                        # Construct the OffsetRequest
-                        timestamp = -1  # -1 for latest, -2 for earliest
-                        max_offsets = 1
-                        request = OffsetRequest[0](
-                            replica_id=-1,
-                            topics=[
-                                (topic, [
-                                    (partition, timestamp, max_offsets) for partition in partitions])
-                                for topic, partitions in partitions_grouped_by_topic.iteritems()])
+                    # Group partitions by topic in order to construct the OffsetRequest
+                    partitions_grouped_by_topic = defaultdict(list)
+                    # partitions_for_broker returns all partitions for which this
+                    # broker is leader. So any partitions that don't currently have
+                    # leaders will be missed. Ignore as they'll be caught on next check run.
+                    broker_partitions = cli.cluster.partitions_for_broker(nodeId)
+                    if broker_partitions:
+                        for topic, partition in broker_partitions:
+                            partitions_grouped_by_topic[topic].append(partition)
 
-                    response = self._make_blocking_req(cli, request, nodeid=broker.nodeId)
-                    offsets, unlead = self._process_highwater_offsets(request, instance, broker.nodeId, response)
-                    highwater_offsets.update(offsets)
-                    topic_partitions_without_a_leader.extend(unlead)
+                            # Construct the OffsetRequest
+                            timestamp = -1  # -1 for latest, -2 for earliest
+                            max_offsets = 1
+                            request = OffsetRequest[0](
+                                replica_id=-1,
+                                topics=[
+                                    (topic, [
+                                        (partition, timestamp, max_offsets) for partition in partitions])
+                                    for topic, partitions in partitions_grouped_by_topic.iteritems()])
+
+                        response = self._make_blocking_req(cli, request, nodeid=nodeId)
+                        offsets, unlead = self._process_highwater_offsets(request, instance, nodeId, response)
+                        highwater_offsets.update(offsets)
+                        topic_partitions_without_a_leader.extend(unlead)
+
+                    processed.append(nodeId)
+                attempts += 1
         except Exception:
             self.log.exception('There was a problem collecting the high watermark offsets')
 
