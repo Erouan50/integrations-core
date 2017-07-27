@@ -137,9 +137,9 @@ class TestKafka(AgentCheckTest):
     @classmethod
     def setUpClass(cls):
         cls.THREADS[0].start()
-        time.sleep(60)
+        time.sleep(30)
         cls.THREADS[1].start()
-        time.sleep(60)
+        time.sleep(30)
 
     @classmethod
     def tearDownClass(cls):
