@@ -137,9 +137,9 @@ class TestKafka(AgentCheckTest):
     @classmethod
     def setUpClass(cls):
         cls.THREADS[0].start()
-        time.sleep(30)
+        time.sleep(10)
         cls.THREADS[1].start()
-        time.sleep(30)
+        time.sleep(10)
 
     @classmethod
     def tearDownClass(cls):
@@ -161,18 +161,16 @@ class TestKafka(AgentCheckTest):
         for instance in instances:
             for name, consumer_group in instance['consumer_groups'].iteritems():
                 for topic, partitions in consumer_group.iteritems():
-	            if topic is not '__consumer_offsets':
-                        for partition in partitions:
-                            tags = ["topic:{}".format(topic),
-                                    "partition:{}".format(partition)]
-                            for mname in BROKER_METRICS:
-                                self.assertMetric(mname, tags=tags, at_least=1)
-                            for mname in CONSUMER_METRICS:
-                                self.assertMetric(mname, tags=tags + ["consumer_group:{}".format(name)], at_least=1)
-                    else:
+                    for partition in partitions:
+                        tags = ["topic:{}".format(topic),
+                                "partition:{}".format(partition)]
                         for mname in BROKER_METRICS:
-                            self.assertMetric(mname, at_least=1)
+                            self.assertMetric(mname, tags=tags, at_least=1)
+                        for mname in CONSUMER_METRICS:
+                            self.assertMetric(mname, tags=tags + ["consumer_group:{}".format(name)], at_least=1)
 
+        # let's reassert for the __consumer_offsets - multiple partitions
+	self.assertMetric('kafka.broker_offset', at_least=1)
         self.coverage_report()
 
 
@@ -203,5 +201,8 @@ class TestKafka(AgentCheckTest):
                 else:
                     for mname in BROKER_METRICS:
                         self.assertMetric(mname, at_least=1)
+                    for mname in CONSUMER_METRICS:
+                        tags = ['topic:__consumer_offsets', "consumer_group:my_consumer", "partition:0"]
+                        self.assertMetric(mname, tags=tags, at_least=1)
 
         self.coverage_report()
